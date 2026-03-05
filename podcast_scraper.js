@@ -42,7 +42,7 @@ function httpGet(url) {
 /**
  * Download a file (binary) from a URL to a local path.
  */
-function downloadFile(url, destPath, maxSizeMB = 25) {
+function downloadFile(url, destPath, maxSizeMB = 200) {
   return new Promise((resolve, reject) => {
     const client = url.startsWith("https") ? https : http;
     const req = client.get(url, { headers: { "User-Agent": "FreightSummaryBot/1.0" } }, (res) => {
@@ -80,11 +80,38 @@ function downloadFile(url, destPath, maxSizeMB = 25) {
       });
     });
     req.on("error", reject);
-    req.setTimeout(120000, () => {
+    req.setTimeout(300000, () => {
       req.destroy();
       reject(new Error("Download timed out"));
     });
   });
+}
+
+/**
+ * Split a file into chunks of up to chunkSizeMB megabytes.
+ * Returns an array of chunk file paths.
+ */
+function splitFile(filePath, chunkSizeMB = 24) {
+  const chunkSize = chunkSizeMB * 1024 * 1024;
+  const fileSize = fs.statSync(filePath).size;
+
+  if (fileSize <= chunkSize) return [filePath];
+
+  const chunks = [];
+  const buffer = fs.readFileSync(filePath);
+  let offset = 0;
+  let index = 0;
+
+  while (offset < fileSize) {
+    const end = Math.min(offset + chunkSize, fileSize);
+    const chunkPath = filePath.replace(".mp3", `_chunk${index}.mp3`);
+    fs.writeFileSync(chunkPath, buffer.slice(offset, end));
+    chunks.push(chunkPath);
+    offset = end;
+    index++;
+  }
+
+  return chunks;
 }
 
 /**
@@ -322,13 +349,33 @@ async function fetchPodcastData(feeds, days = 7, openaiApiKey = null) {
       else if (openaiApiKey && ep.audio_url) {
         console.log(`    [WHISPER] Downloading audio for transcription: ${ep.title}`);
         const audioFile = path.join(tempDir, `episode_${Date.now()}.mp3`);
+        const chunkFiles = [];
         try {
-          await downloadFile(ep.audio_url, audioFile, 25);
-          console.log(`    [WHISPER] Transcribing with OpenAI Whisper...`);
-          const whisperText = await transcribeWithWhisper(audioFile, openaiApiKey);
-          ep.transcript = whisperText;
+          await downloadFile(ep.audio_url, audioFile);
+          const fileSizeMB = (fs.statSync(audioFile).size / (1024 * 1024)).toFixed(1);
+          console.log(`    [WHISPER] Downloaded ${fileSizeMB}MB. Preparing for transcription...`);
+
+          const chunks = splitFile(audioFile, 24);
+          chunkFiles.push(...chunks);
+
+          if (chunks.length > 1) {
+            console.log(`    [WHISPER] Split into ${chunks.length} chunks for Whisper API...`);
+          }
+
+          const transcriptParts = [];
+          for (let i = 0; i < chunks.length; i++) {
+            if (chunks.length > 1) {
+              console.log(`    [WHISPER] Transcribing chunk ${i + 1}/${chunks.length}...`);
+            } else {
+              console.log(`    [WHISPER] Transcribing with OpenAI Whisper...`);
+            }
+            const text = await transcribeWithWhisper(chunks[i], openaiApiKey);
+            transcriptParts.push(text);
+          }
+
+          ep.transcript = transcriptParts.join(" ");
           ep.transcript_method = "whisper";
-          console.log(`    [OK] Whisper transcript received: ${ep.title} (${whisperText.length} chars)`);
+          console.log(`    [OK] Whisper transcript received: ${ep.title} (${ep.transcript.length} chars)`);
         } catch (err) {
           console.log(`    [WARNING] Whisper transcription failed: ${err.message}`);
           // Fall back to show notes
@@ -342,8 +389,10 @@ async function fetchPodcastData(feeds, days = 7, openaiApiKey = null) {
             console.log(`    [MINIMAL] Title only: ${ep.title}`);
           }
         } finally {
-          // Clean up downloaded audio
-          if (fs.existsSync(audioFile)) fs.unlinkSync(audioFile);
+          // Clean up all downloaded/chunk files
+          for (const f of [audioFile, ...chunkFiles]) {
+            if (fs.existsSync(f)) fs.unlinkSync(f);
+          }
         }
       }
       // Priority 4: Show notes fallback
