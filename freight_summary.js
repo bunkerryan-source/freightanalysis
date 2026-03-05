@@ -22,6 +22,20 @@ const path = require("path");
 const readline = require("readline");
 const Anthropic = require("@anthropic-ai/sdk");
 
+// Load .env file if it exists (keeps API keys out of git)
+const envPath = path.join(__dirname, ".env");
+if (fs.existsSync(envPath)) {
+  for (const line of fs.readFileSync(envPath, "utf-8").split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const idx = trimmed.indexOf("=");
+    if (idx === -1) continue;
+    const key = trimmed.slice(0, idx).trim();
+    const val = trimmed.slice(idx + 1).trim();
+    if (!process.env[key]) process.env[key] = val;
+  }
+}
+
 const { fetchYoutubeData } = require("./youtube_scraper");
 const { fetchPodcastData } = require("./podcast_scraper");
 const { fetchStockNews } = require("./stock_news");
@@ -36,7 +50,20 @@ function loadConfig() {
     process.exit(1);
   }
   const raw = fs.readFileSync(configPath, "utf-8");
-  return JSON.parse(raw);
+  const config = JSON.parse(raw);
+
+  // Environment variables override config.json placeholders
+  if (process.env.ANTHROPIC_API_KEY) {
+    config.api_keys.anthropic_api_key = process.env.ANTHROPIC_API_KEY;
+  }
+  if (process.env.OPENAI_API_KEY) {
+    config.api_keys.openai_api_key = process.env.OPENAI_API_KEY;
+  }
+  if (process.env.SENDGRID_API_KEY) {
+    config.api_keys.sendgrid_api_key = process.env.SENDGRID_API_KEY;
+  }
+
+  return config;
 }
 
 function todayStr() {
