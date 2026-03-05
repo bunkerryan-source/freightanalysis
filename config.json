@@ -18,6 +18,7 @@
 
   "api_keys": {
     "anthropic_api_key": "YOUR_ANTHROPIC_API_KEY_HERE",
+    "openai_api_key": "YOUR_OPENAI_API_KEY_HERE",
     "sendgrid_api_key": "YOUR_SENDGRID_API_KEY_HERE"
   },
 

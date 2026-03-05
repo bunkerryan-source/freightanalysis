@@ -8,6 +8,9 @@ package-lock.json
 # Built executable
 *.exe
 
+# Temp audio downloads
+.tmp_audio/
+
 # Environment
 .env
 

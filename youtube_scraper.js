@@ -85,6 +85,8 @@ async function getRecentVideos(channelHandle, days = 7) {
         renderer.title?.runs?.[0]?.text || "Unknown Title";
       const publishText =
         renderer.publishedTimeText?.simpleText || "";
+      const description =
+        renderer.descriptionSnippet?.runs?.map((r) => r.text).join("") || "";
 
       // Filter by recency
       if (!isWithinDays(publishText, days)) {
@@ -96,6 +98,7 @@ async function getRecentVideos(channelHandle, days = 7) {
         title: title,
         url: `https://www.youtube.com/watch?v=${videoId}`,
         published: publishText,
+        description: description,
       });
     }
   } catch (err) {
@@ -150,6 +153,42 @@ async function getTranscript(videoId) {
 }
 
 /**
+ * Fetch the full video description from the watch page.
+ * The channel listing only has a snippet; this gets the complete text.
+ */
+async function getVideoDescription(videoId) {
+  try {
+    const url = `https://www.youtube.com/watch?v=${videoId}`;
+    const html = await httpGet(url, {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      "Accept-Language": "en-US,en;q=0.9",
+    });
+
+    const match = html.match(/var ytInitialData = ({.*?});<\/script>/s);
+    if (!match) return null;
+
+    const data = JSON.parse(match[1]);
+    const contents =
+      data?.contents?.twoColumnWatchNextResults?.results?.results?.contents || [];
+
+    for (const item of contents) {
+      const desc =
+        item?.videoSecondaryInfoRenderer?.attributedDescription?.content;
+      if (desc) return desc;
+
+      // Alternative location in some page layouts
+      const metaDesc =
+        item?.videoSecondaryInfoRenderer?.description?.runs;
+      if (metaDesc) return metaDesc.map((r) => r.text).join("");
+    }
+  } catch {
+    // Silently fail — description is a best-effort fallback
+  }
+  return null;
+}
+
+/**
  * Main function called by the orchestrator.
  * channels: array of { name, channel_handle } from config.json
  * Returns: array of video objects with transcript info.
@@ -171,9 +210,16 @@ async function fetchYoutubeData(channels, days = 7) {
         v.transcript_status = "available";
         console.log(`    [OK] Transcript found: ${v.title}`);
       } else {
+        // Try to get the full description from the video watch page as fallback
+        const desc = await getVideoDescription(v.video_id);
         v.transcript = null;
+        v.description = desc || v.description || null;
         v.transcript_status = "unavailable";
-        console.log(`    [SKIP] No transcript: ${v.title}`);
+        if (desc) {
+          console.log(`    [DESC] No transcript, using video description: ${v.title}`);
+        } else {
+          console.log(`    [SKIP] No transcript or description: ${v.title}`);
+        }
       }
 
       allVideos.push(v);

@@ -134,8 +134,11 @@ Guidelines:
       prompt += `**Published:** ${v.published}\n`;
       prompt += `**URL:** ${v.url}\n`;
       if (v.transcript) {
-        const transcript = v.transcript.substring(0, 8000);
+        const transcript = v.transcript.substring(0, 30000);
         prompt += `**Transcript:** ${transcript}\n`;
+      } else if (v.description) {
+        prompt += `**Transcript:** [Unavailable — using video description]\n`;
+        prompt += `**Description:** ${v.description.substring(0, 5000)}\n`;
       } else {
         prompt += `**Transcript:** [Unavailable]\n`;
       }
@@ -154,7 +157,7 @@ Guidelines:
       prompt += `**Published:** ${ep.published}\n`;
       prompt += `**Content Method:** ${ep.transcript_method}\n`;
       if (ep.transcript) {
-        const transcript = ep.transcript.substring(0, 8000);
+        const transcript = ep.transcript.substring(0, 30000);
         prompt += `**Content:** ${transcript}\n`;
       }
       prompt += "\n---\n";
@@ -317,7 +320,15 @@ async function main() {
   // Step 3: Podcasts
   console.log("[3/7] Fetching podcast data...");
   const podcastFeeds = config.podcast_feeds || [];
-  const podcastData = await fetchPodcastData(podcastFeeds);
+  const openaiKey = config.api_keys?.openai_api_key;
+  const hasOpenaiKey = openaiKey && openaiKey !== "YOUR_OPENAI_API_KEY_HERE";
+  if (hasOpenaiKey) {
+    console.log("  [OK] OpenAI API key found — Whisper transcription enabled.");
+  } else {
+    console.log("  [INFO] No OpenAI API key — podcast audio transcription disabled.");
+    console.log("  To enable, add your OpenAI API key to config.json.");
+  }
+  const podcastData = await fetchPodcastData(podcastFeeds, 7, hasOpenaiKey ? openaiKey : null);
   console.log(`  Total: ${podcastData.length} episode(s) collected.\n`);
 
   // Step 4: Stock news
