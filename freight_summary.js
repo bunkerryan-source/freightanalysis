@@ -131,6 +131,16 @@ function buildPrompt(youtubeData, podcastData, stockData, twitterInput) {
     new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
   );
 
+  // Budget: ~400K chars total for all content (~100K tokens, well within context)
+  // Reserve space for stock data, twitter, and prompt instructions (~20K chars)
+  const TOTAL_CONTENT_BUDGET = 380000;
+  const totalSources = youtubeData.length + podcastData.length;
+  const perSourceLimit = totalSources > 0
+    ? Math.floor(TOTAL_CONTENT_BUDGET / totalSources)
+    : 30000;
+
+  console.log(`  [INFO] ${totalSources} total sources, ~${Math.round(perSourceLimit / 1000)}K chars per source.`);
+
   let prompt = `You are a freight and trucking industry analyst. Based on the data below,
 generate a comprehensive weekly freight market summary for the week of ${weekAgo} to ${today}.
 
@@ -145,9 +155,10 @@ Structure the report with these exact sections:
 Guidelines:
 - Write in a professional but accessible tone.
 - Cite specific sources (video titles, podcast names, company tickers) when referencing information.
+- Reference specific details, quotes, data points, and analysis from the transcripts — do NOT just list titles.
 - If data is thin in any area, note that and still provide useful analysis based on what's available.
 - For the Public Company Highlights section, organize by ticker symbol.
-- Keep the total report between 1500-3000 words.
+- Keep the total report between 2000-4000 words.
 
 ---
 
@@ -161,7 +172,7 @@ Guidelines:
       prompt += `**Published:** ${v.published}\n`;
       prompt += `**URL:** ${v.url}\n`;
       if (v.transcript) {
-        const transcript = v.transcript.substring(0, 30000);
+        const transcript = v.transcript.substring(0, perSourceLimit);
         prompt += `**Transcript:** ${transcript}\n`;
       } else if (v.description) {
         prompt += `**Transcript:** [Unavailable — using video description]\n`;
@@ -184,7 +195,7 @@ Guidelines:
       prompt += `**Published:** ${ep.published}\n`;
       prompt += `**Content Method:** ${ep.transcript_method}\n`;
       if (ep.transcript) {
-        const transcript = ep.transcript.substring(0, 30000);
+        const transcript = ep.transcript.substring(0, perSourceLimit);
         prompt += `**Content:** ${transcript}\n`;
       }
       prompt += "\n---\n";
@@ -217,6 +228,8 @@ Guidelines:
     prompt += "\n[No X/Twitter input provided.]\n";
   }
 
+  console.log(`  [INFO] Total prompt size: ${Math.round(prompt.length / 1000)}K chars (~${Math.round(prompt.length / 4000)}K tokens).`);
+
   return prompt;
 }
 
@@ -230,7 +243,7 @@ async function generateReport(prompt, apiKey) {
 
   const message = await client.messages.create({
     model: "claude-sonnet-4-20250514",
-    max_tokens: 4096,
+    max_tokens: 8192,
     system: `You are a freight and trucking industry analyst producing a weekly market summary report dated ${today}. Write in markdown format.`,
     messages: [{ role: "user", content: prompt }],
   });
