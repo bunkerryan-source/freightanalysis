@@ -1,0 +1,16 @@
+{
+  "name": "freight-market-summary",
+  "version": "1.0.0",
+  "description": "Weekly freight and trucking market summary tool",
+  "main": "freight_summary.js",
+  "scripts": {
+    "start": "node freight_summary.js",
+    "build-exe": "npx pkg freight_summary.js --targets node18-win-x64 --output FreightSummary.exe"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@sendgrid/mail": "^8.1.0",
+    "xml2js": "^0.6.2",
+    "youtube-transcript": "^1.2.1"
+  }
+}

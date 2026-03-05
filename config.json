@@ -1,0 +1,29 @@
+{
+  "// ===== FREIGHT MARKET SUMMARY TOOL - CONFIGURATION =====": "",
+  "// Edit this file to customize your YouTube channels, podcasts, stock tickers, and API keys.": "",
+
+  "youtube_channels": [
+    { "name": "FreightWaves", "channel_handle": "@FreightWavesTV" },
+    { "name": "DAT Freight & Analytics", "channel_handle": "@DATFreightAndAnalytics" },
+    { "name": "Kevin Hill - The Trucking Industry", "channel_handle": "@TruckingIndustry" },
+    { "name": "Trucking Podcast", "channel_handle": "@CDLLife" }
+  ],
+
+  "podcast_feeds": [
+    { "name": "FreightWaves What The Truck", "rss_url": "https://feeds.megaphone.fm/what-the-truck" },
+    { "name": "Dat iQ Live", "rss_url": "https://feeds.buzzsprout.com/2136927.rss" }
+  ],
+
+  "stock_tickers": ["ODFL", "KNX", "WERN", "SAIA", "XPO", "CHRW", "JBHT"],
+
+  "api_keys": {
+    "anthropic_api_key": "YOUR_ANTHROPIC_API_KEY_HERE",
+    "sendgrid_api_key": "YOUR_SENDGRID_API_KEY_HERE"
+  },
+
+  "email": {
+    "from_email": "freight-summary@yourdomain.com",
+    "to_email": "you@youremail.com",
+    "subject_prefix": "Weekly Freight Market Summary"
+  }
+}
