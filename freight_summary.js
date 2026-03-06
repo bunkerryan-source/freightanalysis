@@ -390,7 +390,7 @@ async function main() {
 
   // Step 6: Download and classify tweet images
   console.log("[6/9] Processing X/Twitter images...");
-  const claudeModel = config.claude_model || "claude-opus-4-20250918";
+  const claudeModel = config.claude_model || "claude-opus-4-6";
   let chartImages = [];
   const downloadedImages = await downloadTweetImages(xPosts);
   if (downloadedImages.length > 0) {

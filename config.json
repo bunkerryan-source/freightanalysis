@@ -20,7 +20,7 @@
     { "handle": "@freightalley" }
   ],
 
-  "claude_model": "claude-opus-4-20250918",
+  "claude_model": "claude-opus-4-6",
 
   "api_keys": {
     "anthropic_api_key": "YOUR_ANTHROPIC_API_KEY_HERE",
