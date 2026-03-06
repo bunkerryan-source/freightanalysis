@@ -235,14 +235,14 @@ Guidelines:
 
 // ─── Claude AI Report Generation ────────────────────────────
 
-async function generateReport(prompt, apiKey) {
+async function generateReport(prompt, apiKey, model) {
   console.log("\n  Sending data to Claude API for synthesis...");
 
   const client = new Anthropic({ apiKey: apiKey });
   const today = formatDate(new Date());
 
   const message = await client.messages.create({
-    model: "claude-sonnet-4-20250514",
+    model: model,
     max_tokens: 8192,
     system: `You are a freight and trucking industry analyst producing a weekly market summary report dated ${today}. Write in markdown format.`,
     messages: [{ role: "user", content: prompt }],
@@ -384,7 +384,9 @@ async function main() {
   // Step 6: Generate report with Claude
   console.log("\n[6/7] Generating report with Claude AI...");
   const prompt = buildPrompt(youtubeData, podcastData, stockData, twitterInput);
-  const report = await generateReport(prompt, apiKey);
+  const claudeModel = config.claude_model || "claude-opus-4-20250918";
+  console.log(`  Using model: ${claudeModel}`);
+  const report = await generateReport(prompt, apiKey, claudeModel);
 
   // Step 7: Save and output
   console.log("\n[7/7] Saving and delivering report...");
