@@ -7,7 +7,7 @@
  *   2. Pulls YouTube videos and transcripts from the last 7 days.
  *   3. Pulls podcast episodes and show notes from the last 7 days.
  *   4. Pulls stock news for freight/trucking companies.
- *   5. Asks you to paste in any X/Twitter posts you want included.
+ *   5. Scrapes X/Twitter posts from configured accounts via Apify.
  *   6. Sends everything to the Claude AI API to generate a structured weekly report.
  *   7. Saves the report as a markdown file with today's date.
  *   8. Prints the report to your screen.
@@ -19,7 +19,6 @@
 
 const fs = require("fs");
 const path = require("path");
-const readline = require("readline");
 const Anthropic = require("@anthropic-ai/sdk");
 
 // Load .env file if it exists (keeps API keys out of git)
@@ -39,6 +38,7 @@ if (fs.existsSync(envPath)) {
 const { fetchYoutubeData } = require("./youtube_scraper");
 const { fetchPodcastData } = require("./podcast_scraper");
 const { fetchStockNews } = require("./stock_news");
+const { fetchXPosts, downloadTweetImages, filterChartImages, cleanupTempImages } = require("./x_scraper");
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -62,6 +62,9 @@ function loadConfig() {
   if (process.env.SENDGRID_API_KEY) {
     config.api_keys.sendgrid_api_key = process.env.SENDGRID_API_KEY;
   }
+  if (process.env.APIFY_API_KEY) {
+    config.api_keys.apify_api_key = process.env.APIFY_API_KEY;
+  }
 
   return config;
 }
@@ -78,54 +81,11 @@ function formatDate(d) {
   });
 }
 
-// ─── Twitter / X Input ──────────────────────────────────────
-
-function collectTwitterInput() {
-  return new Promise((resolve) => {
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-    });
-
-    console.log("");
-    console.log("=".repeat(60));
-    console.log("MANUAL X/TWITTER INPUT");
-    console.log("=".repeat(60));
-    console.log(
-      "Paste any X/Twitter posts or quotes you want included in the report."
-    );
-    console.log(
-      "When you're done, type 'DONE' on a new line and press Enter."
-    );
-    console.log(
-      "If you have nothing to add, just type 'DONE' and press Enter."
-    );
-    console.log("-".repeat(60));
-
-    const lines = [];
-
-    rl.on("line", (line) => {
-      if (line.trim().toUpperCase() === "DONE") {
-        rl.close();
-        const text = lines.join("\n").trim();
-        if (text) {
-          console.log(`\n  [OK] Captured ${lines.length} line(s) of X/Twitter input.`);
-        } else {
-          console.log(
-            "\n  [INFO] No X/Twitter input provided. Continuing without it."
-          );
-        }
-        resolve(text);
-      } else {
-        lines.push(line);
-      }
-    });
-  });
-}
+// ─── (Manual Twitter input removed — now uses Apify scraper) ──
 
 // ─── Prompt Builder ─────────────────────────────────────────
 
-function buildPrompt(youtubeData, podcastData, stockData, twitterInput) {
+function buildPrompt(youtubeData, podcastData, stockData, xPosts) {
   const today = formatDate(new Date());
   const weekAgo = formatDate(
     new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
@@ -220,12 +180,20 @@ Guidelines:
     prompt += "\n[No stock news found for this period.]\n";
   }
 
-  prompt += "\n\n### X/TWITTER INPUT\n";
+  prompt += "\n\n### X/TWITTER POSTS\n";
 
-  if (twitterInput) {
-    prompt += `\n${twitterInput}\n`;
+  if (xPosts && xPosts.length > 0) {
+    for (const post of xPosts) {
+      prompt += `\n**Author:** ${post.authorHandle}\n`;
+      prompt += `**Date:** ${post.date}\n`;
+      prompt += `**Post:** ${post.text}\n`;
+      if (post.imageUrls && post.imageUrls.length > 0) {
+        prompt += `**Attached Images:** ${post.imageUrls.length} image(s)\n`;
+      }
+      prompt += "\n---\n";
+    }
   } else {
-    prompt += "\n[No X/Twitter input provided.]\n";
+    prompt += "\n[No X/Twitter posts found for this period.]\n";
   }
 
   console.log(`  [INFO] Total prompt size: ${Math.round(prompt.length / 1000)}K chars (~${Math.round(prompt.length / 4000)}K tokens).`);
@@ -235,17 +203,48 @@ Guidelines:
 
 // ─── Claude AI Report Generation ────────────────────────────
 
-async function generateReport(prompt, apiKey, model) {
+async function generateReport(prompt, apiKey, model, chartImages) {
   console.log("\n  Sending data to Claude API for synthesis...");
 
   const client = new Anthropic({ apiKey: apiKey });
   const today = formatDate(new Date());
 
+  // Build multimodal content: text prompt + any chart images
+  const contentBlocks = [];
+
+  if (chartImages && chartImages.length > 0) {
+    contentBlocks.push({
+      type: "text",
+      text: `The following ${chartImages.length} chart/data image(s) were attached to X/Twitter posts from freight industry accounts. Analyze what you see in these charts and incorporate the data and trends into the weekly report.\n`,
+    });
+
+    for (const img of chartImages) {
+      try {
+        const imageData = fs.readFileSync(img.localPath);
+        const base64 = imageData.toString("base64");
+        const ext = path.extname(img.localPath).toLowerCase().replace(".", "");
+        const mediaType = ext === "png" ? "image/png"
+          : ext === "gif" ? "image/gif"
+          : ext === "webp" ? "image/webp"
+          : "image/jpeg";
+
+        contentBlocks.push({
+          type: "image",
+          source: { type: "base64", media_type: mediaType, data: base64 },
+        });
+      } catch (err) {
+        console.log(`  [WARN] Could not read chart image ${img.localPath}: ${err.message}`);
+      }
+    }
+  }
+
+  contentBlocks.push({ type: "text", text: prompt });
+
   const message = await client.messages.create({
     model: model,
     max_tokens: 8192,
     system: `You are a freight and trucking industry analyst producing a weekly market summary report dated ${today}. Write in markdown format.`,
-    messages: [{ role: "user", content: prompt }],
+    messages: [{ role: "user", content: contentBlocks }],
   });
 
   let reportText = "";
@@ -340,7 +339,7 @@ async function main() {
   console.log("");
 
   // Step 1: Load config
-  console.log("[1/7] Loading configuration...");
+  console.log("[1/9] Loading configuration...");
   const config = loadConfig();
 
   const apiKey = config.api_keys?.anthropic_api_key;
@@ -352,13 +351,13 @@ async function main() {
   console.log("  [OK] Config loaded.\n");
 
   // Step 2: YouTube
-  console.log("[2/7] Fetching YouTube data...");
+  console.log("[2/9] Fetching YouTube data...");
   const youtubeChannels = config.youtube_channels || [];
   const youtubeData = await fetchYoutubeData(youtubeChannels);
   console.log(`  Total: ${youtubeData.length} video(s) collected.\n`);
 
   // Step 3: Podcasts
-  console.log("[3/7] Fetching podcast data...");
+  console.log("[3/9] Fetching podcast data...");
   const podcastFeeds = config.podcast_feeds || [];
   const openaiKey = config.api_keys?.openai_api_key;
   const hasOpenaiKey = openaiKey && openaiKey !== "YOUR_OPENAI_API_KEY_HERE";
@@ -372,24 +371,42 @@ async function main() {
   console.log(`  Total: ${podcastData.length} episode(s) collected.\n`);
 
   // Step 4: Stock news
-  console.log("[4/7] Fetching stock news...");
+  console.log("[4/9] Fetching stock news...");
   const tickers = config.stock_tickers || [];
   const stockData = await fetchStockNews(tickers);
   console.log(`  Total: ${stockData.length} news item(s) collected.\n`);
 
-  // Step 5: Twitter input
-  console.log("[5/7] Collecting X/Twitter input...");
-  const twitterInput = await collectTwitterInput();
+  // Step 5: Scrape X/Twitter posts via Apify
+  console.log("[5/9] Scraping X/Twitter posts via Apify...");
+  const xAccounts = config.x_accounts || [];
+  const apifyKey = config.api_keys?.apify_api_key;
+  const hasApifyKey = apifyKey && apifyKey !== "YOUR_APIFY_API_KEY_HERE";
+  if (!hasApifyKey) {
+    console.log("  [INFO] No Apify API key — X/Twitter scraping disabled.");
+    console.log("  To enable, add your Apify API key to .env or config.json.");
+  }
+  const xPosts = await fetchXPosts(xAccounts, hasApifyKey ? apifyKey : null);
+  console.log(`  Total: ${xPosts.length} X post(s) collected.\n`);
 
-  // Step 6: Generate report with Claude
-  console.log("\n[6/7] Generating report with Claude AI...");
-  const prompt = buildPrompt(youtubeData, podcastData, stockData, twitterInput);
+  // Step 6: Download and classify tweet images
+  console.log("[6/9] Processing X/Twitter images...");
   const claudeModel = config.claude_model || "claude-opus-4-20250918";
-  console.log(`  Using model: ${claudeModel}`);
-  const report = await generateReport(prompt, apiKey, claudeModel);
+  let chartImages = [];
+  const downloadedImages = await downloadTweetImages(xPosts);
+  if (downloadedImages.length > 0) {
+    chartImages = await filterChartImages(downloadedImages, apiKey, claudeModel);
+  } else {
+    console.log("  [INFO] No images to process.");
+  }
 
-  // Step 7: Save and output
-  console.log("\n[7/7] Saving and delivering report...");
+  // Step 7: Generate report with Claude
+  console.log("\n[7/9] Generating report with Claude AI...");
+  const prompt = buildPrompt(youtubeData, podcastData, stockData, xPosts);
+  console.log(`  Using model: ${claudeModel}`);
+  const report = await generateReport(prompt, apiKey, claudeModel, chartImages);
+
+  // Step 8: Save and output
+  console.log("\n[8/9] Saving and delivering report...");
   const filepath = saveReport(report);
   console.log(`  [OK] Report saved to: ${filepath}`);
 
@@ -405,6 +422,10 @@ async function main() {
 
   // Send email
   await sendEmail(report, filepath, config);
+
+  // Step 9: Clean up temp images
+  console.log("\n[9/9] Cleaning up...");
+  cleanupTempImages();
 
   console.log("");
   console.log("  Done! Your weekly freight summary is ready.");

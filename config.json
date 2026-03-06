@@ -16,12 +16,17 @@
 
   "stock_tickers": ["ODFL", "KNX", "WERN", "SAIA", "XPO", "CHRW", "JBHT"],
 
+  "x_accounts": [
+    { "handle": "@freightalley" }
+  ],
+
   "claude_model": "claude-opus-4-20250918",
 
   "api_keys": {
     "anthropic_api_key": "YOUR_ANTHROPIC_API_KEY_HERE",
     "openai_api_key": "YOUR_OPENAI_API_KEY_HERE",
-    "sendgrid_api_key": "YOUR_SENDGRID_API_KEY_HERE"
+    "sendgrid_api_key": "YOUR_SENDGRID_API_KEY_HERE",
+    "apify_api_key": "YOUR_APIFY_API_KEY_HERE"
   },
 
   "email": {

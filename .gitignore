@@ -11,6 +11,9 @@ package-lock.json
 # Temp audio downloads
 .tmp_audio/
 
+# Temp X/Twitter images
+.tmp_x_images/
+
 # Environment
 .env
 
