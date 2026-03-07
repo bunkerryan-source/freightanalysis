@@ -502,15 +502,9 @@ async function generatePdf(htmlFilepath) {
 // ─── Email via SendGrid ─────────────────────────────────────
 
 async function sendEmail(reportHtml, pdfPath, config) {
-  const sgApiKey = config.api_keys.sendgrid_api_key;
-  if (!sgApiKey || sgApiKey === "YOUR_SENDGRID_API_KEY_HERE") {
-    console.log("\n  [SKIP] SendGrid API key not configured. Skipping email.");
-    console.log("  To enable email, add your SendGrid API key to config.json.");
-    return false;
-  }
-
   const emailConfig = config.email || {};
-  const fromEmail = emailConfig.from_email || "freight-summary@example.com";
+  const provider = emailConfig.provider || "sendgrid";
+
   // Support both "to_emails" (array) and legacy "to_email" (string)
   let toEmails = emailConfig.to_emails || [];
   if (toEmails.length === 0 && emailConfig.to_email) {
@@ -520,43 +514,97 @@ async function sendEmail(reportHtml, pdfPath, config) {
     console.log("\n  [SKIP] No email recipients configured. Skipping email.");
     return false;
   }
+
   const subjectPrefix =
     emailConfig.subject_prefix || "Weekly Freight Market Summary";
   const today = todayStr();
 
-  try {
-    const sgMail = require("@sendgrid/mail");
-    sgMail.setApiKey(sgApiKey);
-
-    const attachments = [];
-
-    // Attach PDF if available
-    if (pdfPath && fs.existsSync(pdfPath)) {
-      const pdfContent = fs.readFileSync(pdfPath);
-      attachments.push({
-        content: pdfContent.toString("base64"),
-        filename: path.basename(pdfPath),
-        type: "application/pdf",
-        disposition: "attachment",
-      });
+  if (provider === "gmail") {
+    // Gmail SMTP via Nodemailer
+    const gmailAddress = emailConfig.gmail_address;
+    const gmailAppPassword = emailConfig.gmail_app_password;
+    if (!gmailAddress || !gmailAppPassword) {
+      console.log("\n  [SKIP] Gmail credentials not configured. Skipping email.");
+      console.log("  Set gmail_address and gmail_app_password in config.json email section.");
+      return false;
     }
 
-    const msg = {
-      to: toEmails,
-      from: fromEmail,
-      subject: `${subjectPrefix} - ${today}`,
-      html: reportHtml,
-      attachments: attachments,
-    };
+    try {
+      const nodemailer = require("nodemailer");
+      const transporter = nodemailer.createTransport({
+        service: "gmail",
+        auth: {
+          user: gmailAddress,
+          pass: gmailAppPassword,
+        },
+      });
 
-    const response = await sgMail.send(msg);
-    console.log(
-      `\n  [OK] Email sent! Status code: ${response[0].statusCode}`
-    );
-    return true;
-  } catch (err) {
-    console.log(`\n  [ERROR] Failed to send email: ${err.message}`);
-    return false;
+      const attachments = [];
+      if (pdfPath && fs.existsSync(pdfPath)) {
+        attachments.push({
+          filename: path.basename(pdfPath),
+          path: pdfPath,
+        });
+      }
+
+      const mailOptions = {
+        from: gmailAddress,
+        to: toEmails.join(", "),
+        subject: `${subjectPrefix} - ${today}`,
+        html: reportHtml,
+        attachments: attachments,
+      };
+
+      const info = await transporter.sendMail(mailOptions);
+      console.log(`\n  [OK] Email sent via Gmail! Message ID: ${info.messageId}`);
+      return true;
+    } catch (err) {
+      console.log(`\n  [ERROR] Failed to send email via Gmail: ${err.message}`);
+      return false;
+    }
+  } else {
+    // SendGrid fallback
+    const sgApiKey = config.api_keys.sendgrid_api_key;
+    if (!sgApiKey || sgApiKey === "YOUR_SENDGRID_API_KEY_HERE") {
+      console.log("\n  [SKIP] SendGrid API key not configured. Skipping email.");
+      console.log("  To enable email, add your SendGrid API key to config.json.");
+      return false;
+    }
+
+    const fromEmail = emailConfig.from_email || "freight-summary@example.com";
+
+    try {
+      const sgMail = require("@sendgrid/mail");
+      sgMail.setApiKey(sgApiKey);
+
+      const attachments = [];
+      if (pdfPath && fs.existsSync(pdfPath)) {
+        const pdfContent = fs.readFileSync(pdfPath);
+        attachments.push({
+          content: pdfContent.toString("base64"),
+          filename: path.basename(pdfPath),
+          type: "application/pdf",
+          disposition: "attachment",
+        });
+      }
+
+      const msg = {
+        to: toEmails,
+        from: fromEmail,
+        subject: `${subjectPrefix} - ${today}`,
+        html: reportHtml,
+        attachments: attachments,
+      };
+
+      const response = await sgMail.send(msg);
+      console.log(
+        `\n  [OK] Email sent! Status code: ${response[0].statusCode}`
+      );
+      return true;
+    } catch (err) {
+      console.log(`\n  [ERROR] Failed to send email: ${err.message}`);
+      return false;
+    }
   }
 }
 
