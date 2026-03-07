@@ -31,7 +31,9 @@
 
   "email": {
     "from_email": "freight-summary@yourdomain.com",
-    "to_email": "you@youremail.com",
+    "to_emails": [
+      "you@youremail.com"
+    ],
     "subject_prefix": "Weekly Freight Market Summary"
   }
 }

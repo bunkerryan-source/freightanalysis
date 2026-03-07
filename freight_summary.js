@@ -511,7 +511,15 @@ async function sendEmail(reportHtml, pdfPath, config) {
 
   const emailConfig = config.email || {};
   const fromEmail = emailConfig.from_email || "freight-summary@example.com";
-  const toEmail = emailConfig.to_email || "you@example.com";
+  // Support both "to_emails" (array) and legacy "to_email" (string)
+  let toEmails = emailConfig.to_emails || [];
+  if (toEmails.length === 0 && emailConfig.to_email) {
+    toEmails = [emailConfig.to_email];
+  }
+  if (toEmails.length === 0) {
+    console.log("\n  [SKIP] No email recipients configured. Skipping email.");
+    return false;
+  }
   const subjectPrefix =
     emailConfig.subject_prefix || "Weekly Freight Market Summary";
   const today = todayStr();
@@ -534,7 +542,7 @@ async function sendEmail(reportHtml, pdfPath, config) {
     }
 
     const msg = {
-      to: toEmail,
+      to: toEmails,
       from: fromEmail,
       subject: `${subjectPrefix} - ${today}`,
       html: reportHtml,
