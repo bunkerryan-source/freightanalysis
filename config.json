@@ -32,7 +32,7 @@
   "email": {
     "from_email": "freight-summary@yourdomain.com",
     "to_emails": [
-      "you@youremail.com"
+      "bunker.ryan@gmail.com", "mattt@shieldsbrowncpa.com"
     ],
     "subject_prefix": "Weekly Freight Market Summary"
   }
