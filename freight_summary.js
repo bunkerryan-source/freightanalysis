@@ -65,6 +65,10 @@ function loadConfig() {
   if (process.env.APIFY_API_KEY) {
     config.api_keys.apify_api_key = process.env.APIFY_API_KEY;
   }
+  if (process.env.GMAIL_APP_PASSWORD) {
+    if (!config.email) config.email = {};
+    config.email.gmail_app_password = process.env.GMAIL_APP_PASSWORD;
+  }
 
   return config;
 }
