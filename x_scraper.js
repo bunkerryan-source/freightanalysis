@@ -14,32 +14,31 @@ const http = require("http");
 const TMP_IMAGE_DIR = path.join(__dirname, ".tmp_x_images");
 
 /**
- * Fetch tweets from a single X account using Apify's tweet-scraper actor.
+ * Fetch tweets from an X list URL using Apify's tweet-scraper actor.
  * Returns an array of { text, date, authorHandle, imageUrls }.
  */
-async function scrapeAccount(handle, apifyToken, maxTweets = 50, daysBack = 7) {
-  const cleanHandle = handle.replace(/^@/, "");
+async function scrapeList(listUrl, apifyToken, maxTweets = 100, daysBack = 7) {
   const sinceDate = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000);
   const sinceDateStr = sinceDate.toISOString().split("T")[0];
 
-  console.log(`    Scraping @${cleanHandle} (since ${sinceDateStr}, max ${maxTweets})...`);
+  console.log(`    Scraping list: ${listUrl} (since ${sinceDateStr}, max ${maxTweets})...`);
 
   const actorInput = {
-    handles: [cleanHandle],
+    listUrls: [listUrl],
     tweetsDesired: maxTweets,
-    searchMode: "user",
+    searchMode: "list",
     maxRequestRetries: 3,
-    addUserInfo: false,
+    addUserInfo: true,
     sinceDate: sinceDateStr,
   };
 
   // Start the actor run and wait for it to finish
-  const runUrl = `https://api.apify.com/v2/acts/apidojo~tweet-scraper/run-sync-get-dataset-items?token=${apifyToken}&timeout=120`;
+  const runUrl = `https://api.apify.com/v2/acts/apidojo~tweet-scraper/run-sync-get-dataset-items?token=${apifyToken}&timeout=180`;
 
   const rawItems = await postJSON(runUrl, actorInput);
 
   if (!Array.isArray(rawItems)) {
-    console.log(`    [WARN] Unexpected response for @${cleanHandle}. Skipping.`);
+    console.log(`    [WARN] Unexpected response for list. Skipping.`);
     return [];
   }
 
@@ -64,43 +63,43 @@ async function scrapeAccount(handle, apifyToken, maxTweets = 50, daysBack = 7) {
       }
     }
 
+    const authorHandle = item.author?.userName
+      ? `@${item.author.userName}`
+      : (item.user?.screen_name ? `@${item.user.screen_name}` : "@unknown");
+
     tweets.push({
       text: item.full_text || item.text || "",
       date: item.createdAt || "",
-      authorHandle: `@${cleanHandle}`,
+      authorHandle,
       imageUrls,
     });
   }
 
-  console.log(`    [OK] @${cleanHandle}: ${tweets.length} tweet(s), ${tweets.reduce((n, t) => n + t.imageUrls.length, 0)} image(s).`);
+  console.log(`    [OK] List: ${tweets.length} tweet(s) from ${new Set(tweets.map(t => t.authorHandle)).size} author(s), ${tweets.reduce((n, t) => n + t.imageUrls.length, 0)} image(s).`);
   return tweets;
 }
 
 /**
- * Fetch tweets from all configured X accounts.
+ * Fetch tweets from a configured X list URL (or fall back to individual accounts).
  */
-async function fetchXPosts(xAccounts, apifyToken, maxPerAccount = 50, daysBack = 7) {
+async function fetchXPosts(config, apifyToken, maxTweets = 100, daysBack = 7) {
   if (!apifyToken) {
     console.log("  [SKIP] No Apify API key configured. Skipping X/Twitter scraping.");
     return [];
   }
-  if (!xAccounts || xAccounts.length === 0) {
-    console.log("  [SKIP] No X accounts configured. Skipping X/Twitter scraping.");
+
+  const listUrl = config.x_list_url;
+  if (!listUrl) {
+    console.log("  [SKIP] No x_list_url configured. Skipping X/Twitter scraping.");
     return [];
   }
 
-  const allTweets = [];
-  for (const account of xAccounts) {
-    const handle = account.handle || account;
-    try {
-      const tweets = await scrapeAccount(handle, apifyToken, maxPerAccount, daysBack);
-      allTweets.push(...tweets);
-    } catch (err) {
-      console.log(`    [ERROR] Failed to scrape ${handle}: ${err.message}`);
-    }
+  try {
+    return await scrapeList(listUrl, apifyToken, maxTweets, daysBack);
+  } catch (err) {
+    console.log(`    [ERROR] Failed to scrape list: ${err.message}`);
+    return [];
   }
-
-  return allTweets;
 }
 
 /**

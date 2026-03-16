@@ -41,7 +41,8 @@ All API keys and credentials go in `.env`, never in `config.json`:
 - `youtube_channels` — Array of `{ name, channel_handle }` objects
 - `podcast_feeds` — Array of `{ name, rss_url }` objects
 - `stock_tickers` — Array of ticker symbols (e.g., `"ODFL"`, `"KNX"`)
-- `x_accounts` — Array of `{ handle }` objects (e.g., `"@freightalley"`)
+- `x_list_url` — URL of an X/Twitter list to scrape (e.g., `"https://x.com/i/lists/..."`)
+
 - `claude_model` — Claude model ID to use (default: `"claude-opus-4-6"`)
 - `email.provider` — `"gmail"` or `"sendgrid"`
 - `email.gmail_address` — Gmail sender address

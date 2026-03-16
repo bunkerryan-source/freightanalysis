@@ -660,14 +660,13 @@ async function main() {
 
   // Step 5: Scrape X/Twitter posts via Apify
   console.log("[5/9] Scraping X/Twitter posts via Apify...");
-  const xAccounts = config.x_accounts || [];
   const apifyKey = config.api_keys?.apify_api_key;
   const hasApifyKey = apifyKey && apifyKey !== "YOUR_APIFY_API_KEY_HERE";
   if (!hasApifyKey) {
     console.log("  [INFO] No Apify API key — X/Twitter scraping disabled.");
     console.log("  To enable, add your Apify API key to .env or config.json.");
   }
-  const xPosts = await fetchXPosts(xAccounts, hasApifyKey ? apifyKey : null);
+  const xPosts = await fetchXPosts(config, hasApifyKey ? apifyKey : null);
   console.log(`  Total: ${xPosts.length} X post(s) collected.\n`);
 
   // Step 6: Download and classify tweet images

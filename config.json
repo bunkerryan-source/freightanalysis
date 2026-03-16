@@ -16,9 +16,7 @@
 
   "stock_tickers": ["ODFL", "KNX", "WERN", "SAIA", "XPO", "CHRW", "JBHT"],
 
-  "x_accounts": [
-    { "handle": "@freightalley" }
-  ],
+  "x_list_url": "https://x.com/i/lists/2024881431617687690",
 
   "claude_model": "claude-opus-4-6",
 
