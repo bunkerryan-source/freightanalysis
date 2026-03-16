@@ -39,7 +39,20 @@ const { fetchYoutubeData } = require("./youtube_scraper");
 const { fetchPodcastData } = require("./podcast_scraper");
 const { fetchStockNews } = require("./stock_news");
 const { fetchXPosts, downloadTweetImages, filterChartImages, cleanupTempImages } = require("./x_scraper");
-const nodemailer = require("nodemailer");
+
+// Resolve nodemailer from the project's own node_modules to avoid CWD issues
+const nodemailerPath = path.join(__dirname, "node_modules", "nodemailer");
+let nodemailer;
+try {
+  nodemailer = require(nodemailerPath);
+} catch {
+  try {
+    nodemailer = require("nodemailer");
+  } catch (err) {
+    console.warn("  [WARN] nodemailer not installed. Run: npm install nodemailer");
+    nodemailer = null;
+  }
+}
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -526,6 +539,10 @@ async function sendEmail(reportHtml, pdfPath, config) {
 
   if (provider === "gmail") {
     // Gmail SMTP via Nodemailer
+    if (!nodemailer) {
+      console.log("\n  [ERROR] nodemailer module not found. Run: npm install nodemailer");
+      return false;
+    }
     const gmailAddress = emailConfig.gmail_address;
     const gmailAppPassword = emailConfig.gmail_app_password;
     if (!gmailAddress || !gmailAppPassword) {

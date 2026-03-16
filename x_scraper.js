@@ -26,6 +26,8 @@ async function scrapeList(listUrl, apifyToken, maxTweets = 100, daysBack = 7) {
   const actorInput = {
     listUrls: [listUrl],
     tweetsDesired: maxTweets,
+    maxTweets: maxTweets,
+    maxItems: maxTweets,
     searchMode: "list",
     maxRequestRetries: 3,
     addUserInfo: true,
@@ -33,7 +35,8 @@ async function scrapeList(listUrl, apifyToken, maxTweets = 100, daysBack = 7) {
   };
 
   // Start the actor run and wait for it to finish
-  const runUrl = `https://api.apify.com/v2/acts/apidojo~tweet-scraper/run-sync-get-dataset-items?token=${apifyToken}&timeout=180`;
+  // Add limit param to ensure the dataset endpoint returns all items
+  const runUrl = `https://api.apify.com/v2/acts/apidojo~tweet-scraper/run-sync-get-dataset-items?token=${apifyToken}&timeout=300&limit=${maxTweets}`;
 
   const rawItems = await postJSON(runUrl, actorInput);
 
@@ -243,9 +246,9 @@ function postJSON(url, body) {
     });
 
     req.on("error", reject);
-    req.setTimeout(180000, () => {
+    req.setTimeout(300000, () => {
       req.destroy();
-      reject(new Error("Apify request timed out after 180s"));
+      reject(new Error("Apify request timed out after 300s"));
     });
     req.write(data);
     req.end();
