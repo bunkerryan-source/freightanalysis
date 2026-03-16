@@ -39,6 +39,7 @@ const { fetchYoutubeData } = require("./youtube_scraper");
 const { fetchPodcastData } = require("./podcast_scraper");
 const { fetchStockNews } = require("./stock_news");
 const { fetchXPosts, downloadTweetImages, filterChartImages, cleanupTempImages } = require("./x_scraper");
+const nodemailer = require("nodemailer");
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -534,7 +535,6 @@ async function sendEmail(reportHtml, pdfPath, config) {
     }
 
     try {
-      const nodemailer = require("nodemailer");
       const transporter = nodemailer.createTransport({
         service: "gmail",
         auth: {
