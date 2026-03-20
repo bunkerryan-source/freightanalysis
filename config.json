@@ -4,13 +4,13 @@
 
   "youtube_channels": [
     { "name": "FreightWaves", "channel_handle": "@freightwaves" },
-    { "name": "DAT Freight & Analytics", "channel_handle": "@DATFreightAndAnalytics" },
-    { "name": "Kevin Hill - The Trucking Industry", "channel_handle": "@TruckingIndustry" },
-    { "name": "Trucking Podcast", "channel_handle": "@CDLLife" }
+    { "name": "DAT Freight & Analytics", "channel_handle": "@DATFreightAndAnalytics" }
   ],
 
   "podcast_feeds": [
     { "name": "FreightWaves What The Truck", "rss_url": "https://feeds.megaphone.fm/FREIGHT1716249070" },
+    { "name": "FreightWaves NOW", "rss_url": "https://feeds.blubrry.com/feeds/1472375.xml" },
+    { "name": "FreightCasts", "rss_url": "https://feeds.megaphone.fm/FREIGHT9211237013" },
     { "name": "Dat iQ Live", "rss_url": "https://feeds.simplecast.com/PI6eeqEa" }
   ],
 
