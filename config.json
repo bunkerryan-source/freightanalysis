@@ -14,7 +14,7 @@
     { "name": "Dat iQ Live", "rss_url": "https://feeds.simplecast.com/PI6eeqEa" }
   ],
 
-  "stock_tickers": ["ODFL", "KNX", "WERN", "SAIA", "XPO", "CHRW", "JBHT"],
+  "stock_tickers": ["ODFL", "KNX", "WERN", "SAIA", "XPO", "CHRW", "JBHT", "FDX", "UPS"],
 
   "x_list_url": "https://x.com/i/lists/2024881431617687690",
 
@@ -24,7 +24,8 @@
     "anthropic_api_key": "YOUR_ANTHROPIC_API_KEY_HERE",
     "openai_api_key": "YOUR_OPENAI_API_KEY_HERE",
     "sendgrid_api_key": "YOUR_SENDGRID_API_KEY_HERE",
-    "apify_api_key": "YOUR_APIFY_API_KEY_HERE"
+    "apify_api_key": "YOUR_APIFY_API_KEY_HERE",
+    "fmp_api_key": "YOUR_FMP_API_KEY_HERE"
   },
 
   "email": {

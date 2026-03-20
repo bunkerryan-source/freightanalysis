@@ -7,11 +7,12 @@
  *   2. Pulls YouTube videos and transcripts from the last 7 days.
  *   3. Pulls podcast episodes and show notes from the last 7 days.
  *   4. Pulls stock news for freight/trucking companies.
- *   5. Scrapes X/Twitter posts from configured accounts via Apify.
- *   6. Sends everything to the Claude AI API to generate a structured weekly report.
- *   7. Saves the report as a markdown file with today's date.
- *   8. Prints the report to your screen.
- *   9. Emails the report to you via SendGrid.
+ *   5. Pulls earnings call transcripts from the last 7 days via Financial Modeling Prep API.
+ *   6. Scrapes X/Twitter posts from configured accounts via Apify.
+ *   7. Sends everything to the Claude AI API to generate a structured weekly report.
+ *   8. Saves the report as a markdown file with today's date.
+ *   9. Prints the report to your screen.
+ *  10. Emails the report to you via SendGrid.
  *
  * How to run it:
  *   node freight_summary.js
@@ -39,6 +40,7 @@ const { fetchYoutubeData } = require("./youtube_scraper");
 const { fetchPodcastData } = require("./podcast_scraper");
 const { fetchStockNews } = require("./stock_news");
 const { fetchXPosts, downloadTweetImages, filterChartImages, cleanupTempImages } = require("./x_scraper");
+const { fetchEarningsTranscripts } = require("./earnings_transcripts");
 
 // Resolve nodemailer from the project's own node_modules to avoid CWD issues
 const nodemailerPath = path.join(__dirname, "node_modules", "nodemailer");
@@ -79,6 +81,9 @@ function loadConfig() {
   if (process.env.APIFY_API_KEY) {
     config.api_keys.apify_api_key = process.env.APIFY_API_KEY;
   }
+  if (process.env.FMP_API_KEY) {
+    config.api_keys.fmp_api_key = process.env.FMP_API_KEY;
+  }
   if (process.env.GMAIL_APP_PASSWORD) {
     if (!config.email) config.email = {};
     config.email.gmail_app_password = process.env.GMAIL_APP_PASSWORD;
@@ -103,7 +108,7 @@ function formatDate(d) {
 
 // ─── Prompt Builder ─────────────────────────────────────────
 
-function buildPrompt(youtubeData, podcastData, stockData, xPosts) {
+function buildPrompt(youtubeData, podcastData, stockData, xPosts, earningsData) {
   const today = formatDate(new Date());
   const weekAgo = formatDate(
     new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
@@ -128,7 +133,8 @@ Structure the report with these exact sections:
 ## (c) What the Industry is Talking About
 ## (d) Podcast & Video Highlights
 ## (e) Public Company Highlights
-## (f) Outlook & Implications for the Coming Weeks
+## (f) Earnings Call Insights
+## (g) Outlook & Implications for the Coming Weeks
 
 Guidelines:
 - Write in a professional but accessible tone.
@@ -136,6 +142,7 @@ Guidelines:
 - Reference specific details, quotes, data points, and analysis from the transcripts — do NOT just list titles.
 - If data is thin in any area, note that and still provide useful analysis based on what's available.
 - For the Public Company Highlights section, organize by ticker symbol.
+- For the Earnings Call Insights section, extract and summarize key insights from any available earnings call transcripts that are relevant to the freight/trucking industry — including commentary on freight volumes, pricing, capacity, demand trends, and outlook. If no earnings transcripts were available in the last 7 days, note that no recent earnings calls occurred.
 - Keep the total report between 2000-4000 words.
 
 ---
@@ -212,6 +219,25 @@ Guidelines:
     }
   } else {
     prompt += "\n[No X/Twitter posts found for this period.]\n";
+  }
+
+  prompt += "\n\n### EARNINGS CALL TRANSCRIPTS\n";
+
+  if (earningsData && earningsData.length > 0) {
+    // Earnings transcripts can be very long — cap each at 30K chars
+    const perTranscriptLimit = 30000;
+    for (const item of earningsData) {
+      prompt += `\n**Ticker:** ${item.ticker}\n`;
+      prompt += `**Date:** ${item.date}\n`;
+      prompt += `**Quarter:** Q${item.quarter} ${item.year}\n`;
+      if (item.content) {
+        const content = item.content.substring(0, perTranscriptLimit);
+        prompt += `**Transcript:** ${content}\n`;
+      }
+      prompt += "\n---\n";
+    }
+  } else {
+    prompt += "\n[No earnings call transcripts found for this period.]\n";
   }
 
   console.log(`  [INFO] Total prompt size: ${Math.round(prompt.length / 1000)}K chars (~${Math.round(prompt.length / 4000)}K tokens).`);
@@ -638,7 +664,7 @@ async function main() {
   console.log("");
 
   // Step 1: Load config
-  console.log("[1/9] Loading configuration...");
+  console.log("[1/10] Loading configuration...");
   const config = loadConfig();
 
   const apiKey = config.api_keys?.anthropic_api_key;
@@ -650,13 +676,13 @@ async function main() {
   console.log("  [OK] Config loaded.\n");
 
   // Step 2: YouTube
-  console.log("[2/9] Fetching YouTube data...");
+  console.log("[2/10] Fetching YouTube data...");
   const youtubeChannels = config.youtube_channels || [];
   const youtubeData = await fetchYoutubeData(youtubeChannels);
   console.log(`  Total: ${youtubeData.length} video(s) collected.\n`);
 
   // Step 3: Podcasts
-  console.log("[3/9] Fetching podcast data...");
+  console.log("[3/10] Fetching podcast data...");
   const podcastFeeds = config.podcast_feeds || [];
   const openaiKey = config.api_keys?.openai_api_key;
   const hasOpenaiKey = openaiKey && openaiKey !== "YOUR_OPENAI_API_KEY_HERE";
@@ -670,13 +696,24 @@ async function main() {
   console.log(`  Total: ${podcastData.length} episode(s) collected.\n`);
 
   // Step 4: Stock news
-  console.log("[4/9] Fetching stock news...");
+  console.log("[4/10] Fetching stock news...");
   const tickers = config.stock_tickers || [];
   const stockData = await fetchStockNews(tickers);
   console.log(`  Total: ${stockData.length} news item(s) collected.\n`);
 
-  // Step 5: Scrape X/Twitter posts via Apify
-  console.log("[5/9] Scraping X/Twitter posts via Apify...");
+  // Step 5: Earnings call transcripts
+  console.log("[5/10] Fetching earnings call transcripts...");
+  const fmpKey = config.api_keys?.fmp_api_key;
+  const hasFmpKey = fmpKey && fmpKey !== "YOUR_FMP_API_KEY_HERE";
+  if (!hasFmpKey) {
+    console.log("  [INFO] No FMP API key — earnings transcript fetching disabled.");
+    console.log("  To enable, add your Financial Modeling Prep API key to .env (FMP_API_KEY=...).");
+  }
+  const earningsData = await fetchEarningsTranscripts(tickers, hasFmpKey ? fmpKey : null);
+  console.log(`  Total: ${earningsData.length} transcript(s) collected.\n`);
+
+  // Step 6: Scrape X/Twitter posts via Apify
+  console.log("[6/10] Scraping X/Twitter posts via Apify...");
   const apifyKey = config.api_keys?.apify_api_key;
   const hasApifyKey = apifyKey && apifyKey !== "YOUR_APIFY_API_KEY_HERE";
   if (!hasApifyKey) {
@@ -686,8 +723,8 @@ async function main() {
   const xPosts = await fetchXPosts(config, hasApifyKey ? apifyKey : null);
   console.log(`  Total: ${xPosts.length} X post(s) collected.\n`);
 
-  // Step 6: Download and classify tweet images
-  console.log("[6/9] Processing X/Twitter images...");
+  // Step 7: Download and classify tweet images
+  console.log("[7/10] Processing X/Twitter images...");
   const claudeModel = config.claude_model || "claude-opus-4-6";
   let chartImages = [];
   const downloadedImages = await downloadTweetImages(xPosts);
@@ -697,14 +734,14 @@ async function main() {
     console.log("  [INFO] No images to process.");
   }
 
-  // Step 7: Generate report with Claude
-  console.log("\n[7/9] Generating report with Claude AI...");
-  const prompt = buildPrompt(youtubeData, podcastData, stockData, xPosts);
+  // Step 8: Generate report with Claude
+  console.log("\n[8/10] Generating report with Claude AI...");
+  const prompt = buildPrompt(youtubeData, podcastData, stockData, xPosts, earningsData);
   console.log(`  Using model: ${claudeModel}`);
   const report = await generateReport(prompt, apiKey, claudeModel, chartImages);
 
-  // Step 8: Save and output
-  console.log("\n[8/9] Saving and delivering report...");
+  // Step 9: Save and output
+  console.log("\n[9/10] Saving and delivering report...");
   const mdFilepath = saveReport(report);
   console.log(`  [OK] Markdown saved to: ${mdFilepath}`);
 
@@ -729,8 +766,8 @@ async function main() {
   // Send email with HTML body and PDF attachment
   await sendEmail(reportHtml, pdfPath, config);
 
-  // Step 9: Clean up temp images
-  console.log("\n[9/9] Cleaning up...");
+  // Step 10: Clean up temp images
+  console.log("\n[10/10] Cleaning up...");
   cleanupTempImages();
 
   console.log("");
