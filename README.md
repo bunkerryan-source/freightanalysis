@@ -169,6 +169,24 @@ The default configuration tracks these freight/trucking companies:
 | FDX | FedEx Corporation |
 | UPS | United Parcel Service |
 
+## Pushing Local Changes to GitHub
+
+If you make changes to any files (e.g., editing `config.json`, updating code), use these commands to push them to your GitHub repository:
+
+```
+cd C:\Users\rbunker\freightanalysis\freightanalysis
+git add -A
+git commit -m "Describe your changes here"
+git push
+```
+
+**What each command does:**
+- `git add -A` — Stages all your changed files for commit
+- `git commit -m "..."` — Saves a snapshot of your changes with a description
+- `git push` — Uploads your committed changes to GitHub
+
+**Note:** Your `.env` file (containing API keys) is in `.gitignore` and will never be pushed to GitHub.
+
 ## Troubleshooting
 
 **"Node.js is not installed"** — Download from https://nodejs.org/ and run the installer.
