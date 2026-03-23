@@ -17,7 +17,7 @@ const TMP_IMAGE_DIR = path.join(__dirname, ".tmp_x_images");
  * Fetch tweets from an X list URL using Apify's tweet-scraper actor.
  * Returns an array of { text, date, authorHandle, imageUrls }.
  */
-async function scrapeList(listUrl, apifyToken, maxTweets = 100, daysBack = 7) {
+async function scrapeList(listUrl, apifyToken, maxTweets = 500, daysBack = 7) {
   const sinceDate = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000);
   const sinceDateStr = sinceDate.toISOString().split("T")[0];
 
@@ -34,14 +34,24 @@ async function scrapeList(listUrl, apifyToken, maxTweets = 100, daysBack = 7) {
     sinceDate: sinceDateStr,
   };
 
-  // Start the actor run and wait for it to finish
-  // Add limit param to ensure the dataset endpoint returns all items
-  const runUrl = `https://api.apify.com/v2/acts/apidojo~tweet-scraper/run-sync-get-dataset-items?token=${apifyToken}&timeout=300&limit=${maxTweets}`;
+  // Step 1: Start the actor run and wait for it to finish (don't fetch dataset inline)
+  const runUrl = `https://api.apify.com/v2/acts/apidojo~tweet-scraper/run-sync?token=${apifyToken}&timeout=300`;
 
-  const rawItems = await postJSON(runUrl, actorInput);
+  const runResult = await postJSON(runUrl, actorInput);
 
-  if (!Array.isArray(rawItems)) {
-    console.log(`    [WARN] Unexpected response for list. Skipping.`);
+  // Extract the dataset ID from the run result
+  const datasetId = runResult?.data?.defaultDatasetId;
+  if (!datasetId) {
+    // Fallback: try the old endpoint in case the response shape differs
+    console.log(`    [WARN] Could not get datasetId from run result. Trying fallback...`);
+    return await scrapeListFallback(listUrl, apifyToken, maxTweets, daysBack, sinceDateStr, sinceDate, actorInput);
+  }
+
+  // Step 2: Fetch ALL items from the dataset with pagination
+  const rawItems = await fetchAllDatasetItems(datasetId, apifyToken, maxTweets);
+
+  if (!Array.isArray(rawItems) || rawItems.length === 0) {
+    console.log(`    [WARN] No items returned from dataset. Skipping.`);
     return [];
   }
 
@@ -85,7 +95,7 @@ async function scrapeList(listUrl, apifyToken, maxTweets = 100, daysBack = 7) {
 /**
  * Fetch tweets from a configured X list URL (or fall back to individual accounts).
  */
-async function fetchXPosts(config, apifyToken, maxTweets = 100, daysBack = 7) {
+async function fetchXPosts(config, apifyToken, maxTweets = 500, daysBack = 7) {
   if (!apifyToken) {
     console.log("  [SKIP] No Apify API key configured. Skipping X/Twitter scraping.");
     return [];
@@ -215,7 +225,76 @@ function cleanupTempImages() {
   }
 }
 
+// ─── Fallback: original one-shot approach if run-sync doesn't return datasetId ───
+
+async function scrapeListFallback(listUrl, apifyToken, maxTweets, daysBack, sinceDateStr, sinceDate, actorInput) {
+  const runUrl = `https://api.apify.com/v2/acts/apidojo~tweet-scraper/run-sync-get-dataset-items?token=${apifyToken}&timeout=300&limit=${maxTweets}&clean=true`;
+  const rawItems = await postJSON(runUrl, actorInput);
+  if (!Array.isArray(rawItems)) {
+    console.log(`    [WARN] Fallback also returned unexpected response. Skipping.`);
+    return [];
+  }
+  return rawItems;
+}
+
+// ─── Fetch all items from an Apify dataset with pagination ───
+
+async function fetchAllDatasetItems(datasetId, apifyToken, maxTweets) {
+  const allItems = [];
+  let offset = 0;
+  const pageSize = 100; // Apify default max per page
+
+  while (offset < maxTweets) {
+    const url = `https://api.apify.com/v2/datasets/${datasetId}/items?token=${apifyToken}&offset=${offset}&limit=${pageSize}&clean=true&format=json`;
+    const items = await getJSON(url);
+
+    if (!Array.isArray(items) || items.length === 0) break;
+
+    allItems.push(...items);
+    console.log(`    Fetched ${allItems.length} items so far (offset=${offset})...`);
+
+    if (items.length < pageSize) break; // Last page
+    offset += pageSize;
+  }
+
+  console.log(`    [OK] Total items fetched from dataset: ${allItems.length}`);
+  return allItems;
+}
+
 // ─── HTTP Helpers ─────────────────────────────────────────────
+
+function getJSON(url) {
+  return new Promise((resolve, reject) => {
+    const parsed = new URL(url);
+    const options = {
+      hostname: parsed.hostname,
+      port: parsed.port || 443,
+      path: parsed.pathname + parsed.search,
+      method: "GET",
+      headers: { "Accept": "application/json" },
+    };
+
+    const req = https.request(options, (res) => {
+      let chunks = [];
+      res.on("data", (chunk) => chunks.push(chunk));
+      res.on("end", () => {
+        const raw = Buffer.concat(chunks).toString();
+        try {
+          resolve(JSON.parse(raw));
+        } catch {
+          reject(new Error(`Apify returned non-JSON (status ${res.statusCode}): ${raw.substring(0, 200)}`));
+        }
+      });
+    });
+
+    req.on("error", reject);
+    req.setTimeout(120000, () => {
+      req.destroy();
+      reject(new Error("Apify GET request timed out after 120s"));
+    });
+    req.end();
+  });
+}
 
 function postJSON(url, body) {
   return new Promise((resolve, reject) => {
