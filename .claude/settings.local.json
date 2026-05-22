@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "defaultMode": "bypassPermissions",
+    "allow": [
+      "Bash(grep -r \"TODO\\\\|FIXME\\\\|BUG\\\\|HACK\" --include=*.js --include=*.md)",
+      "Bash(ls -lh /c/Users/rbunker/freightanalysis/freightanalysis/freight_summary_*.*)",
+      "Bash(wc -l /c/Users/rbunker/freightanalysis/freightanalysis/*.js)"
+    ]
+  },
+  "skipDangerousModePermissionPrompt": true
+}
